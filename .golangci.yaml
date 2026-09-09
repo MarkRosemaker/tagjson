@@ -1,0 +1,44 @@
+version: 2
+linters:
+    default: none
+    enable:
+        - usetesting
+        - tagalign
+        - testifylint
+        - dupword
+        - noctx
+    settings:
+        tagalign:
+            align: true
+            sort: true
+            order:
+                - json
+                - required
+                - description
+            strict: true
+        testifylint:
+            enable-all: true
+            disable:
+                - require-error
+                - float-compare
+        usetesting:
+            context-background: true
+            context-todo: false
+            os-chdir: true
+            os-mkdir-temp: true
+            os-setenv: true
+            os-temp-dir: true
+            os-create-temp: true
+formatters:
+    enable:
+        - gci
+        - gofumpt
+        - goimports
+    settings:
+        gofumpt:
+            extra:
+                group-params: true
+                clothe-returns: true
+                balance-calls: true
+    exclusions:
+        generated: strict

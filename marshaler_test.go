@@ -10,7 +10,7 @@ import (
 type testStruct struct {
 	Foo          string  `mapstructure:"foo"`
 	Bar          int     `mapstructure:"bar"`
-	DifferentTag float64 `mytag:"bar"`
+	DifferentTag float64 `                   mytag:"bar"`
 	NotTagged    bool
 	internal     int
 }
