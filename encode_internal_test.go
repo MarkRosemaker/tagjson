@@ -171,9 +171,11 @@ func TestEncode(t *testing.T) {
 	})
 
 	t.Run("a duration is written in its String form", func(t *testing.T) {
-		got := marshal(t, fixture{Name: "x", Timeout: 90 * time.Second}, json.WithMarshalers(json.MarshalToFunc(func(enc *jsontext.Encoder, d time.Duration) error {
-			return enc.WriteToken(jsontext.String(d.String()))
-		})))
+		got := marshal(t, fixture{Name: "x", Timeout: 90 * time.Second}, json.JoinOptions(
+			json.WithMarshalers(json.MarshalToFunc(func(enc *jsontext.Encoder, d time.Duration) error {
+				return enc.WriteToken(jsontext.String(d.String()))
+			})),
+		))
 		if !strings.Contains(got, `"timeout":"1m30s"`) {
 			t.Errorf("got %s", got)
 		}

@@ -32,10 +32,6 @@ func (m Marshaler) encodeValue(enc *jsontext.Encoder, v reflect.Value, opts ...j
 		v = v.Elem()
 	}
 
-	if v.Type() == durationType {
-		return enc.WriteToken(jsontext.String(time.Duration(v.Int()).String()))
-	}
-
 	switch v.Kind() {
 	case reflect.Struct:
 		return m.encodeStruct(enc, v, opts...)
@@ -44,7 +40,7 @@ func (m Marshaler) encodeValue(enc *jsontext.Encoder, v reflect.Value, opts ...j
 	case reflect.Slice, reflect.Array:
 		return m.encodeSlice(enc, v, opts...)
 	default:
-		return json.MarshalEncode(enc, v.Interface())
+		return json.MarshalEncode(enc, v.Interface(), opts...)
 	}
 }
 
