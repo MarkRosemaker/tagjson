@@ -8,8 +8,18 @@ type Settings struct {
 	Fast   bool `mapstructure:"fast"`
 }
 
-b, _ := tagjson.MarshalJSON(Settings{TabLen: 4})
-// {"tab-len":4}
+func main() {
+	m := tagjson.NewMarshaler("mapstructure")
+
+	b, err := m.Marshal(Settings{TabLen: 4, Fast: false})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(string(b))
+	// Output: {"tab-len":4}
+}
 ```
 
 ## Why this exists
@@ -20,14 +30,14 @@ direction of its own. Handing such a struct to `encoding/json` directly
 ignores the `mapstructure` tags entirely, falling back to raw Go field names
 and writing every zero value out explicitly.
 
-`MarshalJSON` reads the `mapstructure` tag through reflection instead, so any
+`Marshal` reads the `mapstructure` tag through reflection instead, so any
 type already set up for `mapstructure` decoding marshals back out correctly
 with no further annotation — including a type added after this package was
 last touched, since there is no per-type registry to fall out of sync.
 
 ## Reading a different tag
 
-`MarshalJSON` and `MarshalWriteJSON` always read `mapstructure`, matching the
+`Marshal` and `MarshalWrite` always read `mapstructure`, matching the
 package name. For any other tag — `yaml`, `toml`, a project's own — use
 `Marshaler` directly, with the same semantics throughout:
 
@@ -37,36 +47,50 @@ type Settings struct {
 	Fast   bool `yaml:"fast"`
 }
 
-m := tagjson.Marshaler{Tag: "yaml"}
-b, _ := m.Marshal(Settings{TabLen: 4})
-// {"tab-len":4}
-```
+func main() {
+	m := tagjson.NewMarshaler("yaml")
 
-`Marshaler{}` (Tag left empty) behaves exactly like the package-level
-functions. Its methods are named `Marshal`/`MarshalWrite`, not
-`MarshalJSON`/`MarshalWriteJSON` — a method actually named `MarshalJSON` is
-what `encoding/json` looks for to mean "this type knows how to marshal
-itself", the opposite of what `Marshaler` does.
+	b, err := m.Marshal(Settings{TabLen: 4, Fast: false})
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(string(b))
+	// Output: {"tab-len":4}
+}
+```
 
 ## Getting YAML
 
-This package only produces JSON: JSON is what every YAML library already
-round-trips through, so a caller wanting YAML converts `MarshalJSON`'s output
+This package only produces JSON. A caller wanting YAML converts `Marshal`'s output
 with whichever library they prefer, rather than this package choosing one and
 every consumer paying for it:
 
 ```go
 import (
 	"encoding/json/jsontext"
+	"fmt"
+	"os"
 
 	"github.com/MarkRosemaker/json2yaml"
-	"github.com/MarkRosemaker/portfolio/tagjson"
+	"github.com/MarkRosemaker/tagjson"
 	"gopkg.in/yaml.v3"
 )
 
-b, err := tagjson.MarshalJSON(v)
-node, err := json2yaml.Convert(jsontext.Value(b))
-yaml.NewEncoder(os.Stdout).Encode(node)
+type Settings struct {
+	TabLen int  `yaml:"tab-len"`
+	Fast   bool `yaml:"fast"`
+}
+
+func Example_foo() {
+	m := tagjson.NewMarshaler("yaml")
+
+	b, _ := m.Marshal(Settings{TabLen: 4, Fast: false})
+	node, _ := json2yaml.Convert(jsontext.Value(b))
+	_ = yaml.NewEncoder(os.Stdout).Encode(node)
+	// Output: tab-len: 4
+}
 ```
 
 ## Semantics
@@ -100,16 +124,3 @@ solved by hand for golangci-lint's config type, field by field, with the
 build breaking instead of drifting silently when golangci-lint's own types
 change shape.
 
-## A known toolchain issue
-
-`MarshalWriteJSON` calls `reflect.ValueOf(&v).Elem().Elem()` rather than the
-more obvious `reflect.ValueOf(v)`. The plain form reproducibly crashed a
-`go test -race` build with "found bad pointer in Go heap" a few call frames
-into the reflection walk — reached through the "Getting YAML" call chain above
-(`MarshalJSON` followed by a JSON-to-YAML conversion) but not through
-`MarshalJSON` called directly at the same depth. It reproduces on go1.27 both
-with and without `GOEXPERIMENT=jsonv2`, so it reads as a toolchain
-escape-analysis defect for boxing a large value into `reflect.ValueOf`'s `any`
-parameter at depth, not a bug in the value being encoded. See the comment
-beside the fix and `TestMarshalYAML`, and re-check both once this project's Go
-toolchain is past its current bleeding edge.

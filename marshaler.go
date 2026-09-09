@@ -64,6 +64,10 @@ type Marshaler struct {
 }
 
 func NewMarshaler(tag string) *Marshaler {
+	if tag == "" {
+		panic("no tag given")
+	}
+
 	return &Marshaler{tag: tag}
 }
 

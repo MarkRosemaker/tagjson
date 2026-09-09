@@ -74,14 +74,14 @@ func (m Marshaler) writeStructFields(enc *jsontext.Encoder, v reflect.Value, opt
 			continue
 		}
 
-		tag, key, squash := m.fieldTag(field)
+		tag, key, inline := m.fieldTag(field)
 		if !tag {
 			continue
 		}
 
 		fv := v.Field(i)
 
-		if squash {
+		if inline {
 			if err := m.writeInlined(enc, fv, opts...); err != nil {
 				return fmt.Errorf("%s: %w", field.Name, err)
 			}
