@@ -1,7 +1,8 @@
-package mapstructurejson
+package tagjson
 
 import (
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"reflect"
 	"sort"
@@ -21,8 +22,9 @@ var durationType = reflect.TypeFor[time.Duration]()
 // the caller's, made once against [Marshaler.isEmpty] before recursing here,
 // since only the caller (holding the struct field or map entry v came from)
 // can act on that answer by omitting the key altogether.
-func (m Marshaler) encodeValue(enc *jsontext.Encoder, v reflect.Value) error {
-	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
+func (m Marshaler) encodeValue(enc *jsontext.Encoder, v reflect.Value, opts ...json.Options) error {
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface:
 		if v.IsNil() {
 			return enc.WriteToken(jsontext.Null)
 		}
@@ -36,36 +38,24 @@ func (m Marshaler) encodeValue(enc *jsontext.Encoder, v reflect.Value) error {
 
 	switch v.Kind() {
 	case reflect.Struct:
-		return m.encodeStruct(enc, v)
+		return m.encodeStruct(enc, v, opts...)
 	case reflect.Map:
-		return m.encodeMap(enc, v)
+		return m.encodeMap(enc, v, opts...)
 	case reflect.Slice, reflect.Array:
-		return m.encodeSlice(enc, v)
-	case reflect.String:
-		return enc.WriteToken(jsontext.String(v.String()))
-	case reflect.Bool:
-		return enc.WriteToken(jsontext.Bool(v.Bool()))
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return enc.WriteToken(jsontext.Int(v.Int()))
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return enc.WriteToken(jsontext.Uint(v.Uint()))
-	case reflect.Float32:
-		return enc.WriteToken(jsontext.Float32(float32(v.Float())))
-	case reflect.Float64:
-		return enc.WriteToken(jsontext.Float(v.Float()))
+		return m.encodeSlice(enc, v, opts...)
 	default:
-		return fmt.Errorf("cannot encode %s (kind %s)", v.Type(), v.Kind())
+		return json.MarshalEncode(enc, v.Interface())
 	}
 }
 
 // encodeStruct writes v as a JSON object, one member per field that carries a
 // usable tag and is not empty.
-func (m Marshaler) encodeStruct(enc *jsontext.Encoder, v reflect.Value) error {
+func (m Marshaler) encodeStruct(enc *jsontext.Encoder, v reflect.Value, opts ...json.Options) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return err
 	}
 
-	if err := m.writeStructFields(enc, v); err != nil {
+	if err := m.writeStructFields(enc, v, opts...); err != nil {
 		return err
 	}
 
@@ -79,7 +69,7 @@ func (m Marshaler) encodeStruct(enc *jsontext.Encoder, v reflect.Value) error {
 // of their own — so this is also where squashing happens: a squashed field is
 // expanded via a second call to writeStructFields, at the position it was
 // declared, rather than written as a nested value.
-func (m Marshaler) writeStructFields(enc *jsontext.Encoder, v reflect.Value) error {
+func (m Marshaler) writeStructFields(enc *jsontext.Encoder, v reflect.Value, opts ...json.Options) error {
 	t := v.Type()
 
 	for i := range t.NumField() {
@@ -96,7 +86,7 @@ func (m Marshaler) writeStructFields(enc *jsontext.Encoder, v reflect.Value) err
 		fv := v.Field(i)
 
 		if squash {
-			if err := m.writeSquashed(enc, fv); err != nil {
+			if err := m.writeInlined(enc, fv, opts...); err != nil {
 				return fmt.Errorf("%s: %w", field.Name, err)
 			}
 
@@ -111,7 +101,7 @@ func (m Marshaler) writeStructFields(enc *jsontext.Encoder, v reflect.Value) err
 			return err
 		}
 
-		if err := m.encodeValue(enc, fv); err != nil {
+		if err := m.encodeValue(enc, fv, opts...); err != nil {
 			return fmt.Errorf("%s: %w", field.Name, err)
 		}
 	}
@@ -119,31 +109,31 @@ func (m Marshaler) writeStructFields(enc *jsontext.Encoder, v reflect.Value) err
 	return nil
 }
 
-// fieldTag reads field's m.tag() tag, reporting whether the field is part of
-// the schema at all (ok), the key to write it under, and whether it is a
-// ",squash" embed. A field with no such tag is treated the same as one
+// fieldTag reads field's m.tag tag, reporting whether the field is part of
+// the schema at all (ok), the key to write it under, and whether it is an embed.
+// A field with no such tag is treated the same as one
 // tagged "-": decoding would not have populated it from a decoded map
 // either, so it is not this package's to write back out.
-func (m Marshaler) fieldTag(field reflect.StructField) (ok bool, key string, squash bool) {
-	tag, present := field.Tag.Lookup(m.tag())
+func (m Marshaler) fieldTag(field reflect.StructField) (bool, string, bool) {
+	tag, present := field.Tag.Lookup(m.tag)
 	if !present || tag == "-" {
 		return false, "", false
 	}
 
-	if tag == ",squash" {
+	key, opt, _ := strings.Cut(tag, ",")
+	switch opt {
+	case "squash", "inline", "embed":
 		return true, "", true
 	}
-
-	key, _, _ = strings.Cut(tag, ",")
 
 	return true, key, false
 }
 
-// writeSquashed inlines an embedded struct's fields into the object currently
+// writeInlined inlines an embedded struct's fields into the object currently
 // being written. A nil embedded pointer contributes nothing, the same as any
 // other empty value would.
-func (m Marshaler) writeSquashed(enc *jsontext.Encoder, v reflect.Value) error {
-	for v.Kind() == reflect.Ptr {
+func (m Marshaler) writeInlined(enc *jsontext.Encoder, v reflect.Value, opts ...json.Options) error {
+	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			return nil
 		}
@@ -151,14 +141,14 @@ func (m Marshaler) writeSquashed(enc *jsontext.Encoder, v reflect.Value) error {
 		v = v.Elem()
 	}
 
-	return m.writeStructFields(enc, v)
+	return m.writeStructFields(enc, v, opts...)
 }
 
 // encodeMap writes v as a JSON object, keyed by v's own map keys rather than
 // any tag: a map here is a linter name, a module path, a value the caller
 // chose, not part of the schema itself. Keys are sorted, since a Go map does
 // not otherwise keep the order they went in.
-func (m Marshaler) encodeMap(enc *jsontext.Encoder, v reflect.Value) error {
+func (m Marshaler) encodeMap(enc *jsontext.Encoder, v reflect.Value, opts ...json.Options) error {
 	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return err
 	}
@@ -180,7 +170,7 @@ func (m Marshaler) encodeMap(enc *jsontext.Encoder, v reflect.Value) error {
 			return err
 		}
 
-		if err := m.encodeValue(enc, mv); err != nil {
+		if err := m.encodeValue(enc, mv, opts...); err != nil {
 			return fmt.Errorf("%s: %w", key, err)
 		}
 	}
@@ -189,13 +179,13 @@ func (m Marshaler) encodeMap(enc *jsontext.Encoder, v reflect.Value) error {
 }
 
 // encodeSlice writes v as a JSON array.
-func (m Marshaler) encodeSlice(enc *jsontext.Encoder, v reflect.Value) error {
+func (m Marshaler) encodeSlice(enc *jsontext.Encoder, v reflect.Value, opts ...json.Options) error {
 	if err := enc.WriteToken(jsontext.BeginArray); err != nil {
 		return err
 	}
 
 	for i := range v.Len() {
-		if err := m.encodeValue(enc, v.Index(i)); err != nil {
+		if err := m.encodeValue(enc, v.Index(i), opts...); err != nil {
 			return fmt.Errorf("[%d]: %w", i, err)
 		}
 	}
@@ -212,7 +202,7 @@ func (m Marshaler) encodeSlice(enc *jsontext.Encoder, v reflect.Value) error {
 // exactly when nothing about it would be written.
 func (m Marshaler) isEmpty(v reflect.Value) bool {
 	switch v.Kind() {
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		return v.IsNil() || m.isEmpty(v.Elem())
 	case reflect.Map, reflect.Slice:
 		return v.Len() == 0

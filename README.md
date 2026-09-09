@@ -1,8 +1,6 @@
-# mapstructurejson
+# tagjson
 
-Marshal a [mapstructure](https://github.com/go-viper/mapstructure)-tagged Go
-value to JSON — reading the `mapstructure` tags themselves, not a parallel
-set of `json` tags.
+Marshal a struct-tagged Go value to JSON (e.g. [mapstructure](https://github.com/go-viper/mapstructure)-tagged) — reading the tags themselves, not a parallel set of `json` tags.
 
 ```go
 type Settings struct {
@@ -10,7 +8,7 @@ type Settings struct {
 	Fast   bool `mapstructure:"fast"`
 }
 
-b, _ := mapstructurejson.MarshalJSON(Settings{TabLen: 4})
+b, _ := tagjson.MarshalJSON(Settings{TabLen: 4})
 // {"tab-len":4}
 ```
 
@@ -39,7 +37,7 @@ type Settings struct {
 	Fast   bool `yaml:"fast"`
 }
 
-m := mapstructurejson.Marshaler{Tag: "yaml"}
+m := tagjson.Marshaler{Tag: "yaml"}
 b, _ := m.Marshal(Settings{TabLen: 4})
 // {"tab-len":4}
 ```
@@ -62,11 +60,11 @@ import (
 	"encoding/json/jsontext"
 
 	"github.com/MarkRosemaker/json2yaml"
-	"github.com/MarkRosemaker/portfolio/mapstructurejson"
+	"github.com/MarkRosemaker/portfolio/tagjson"
 	"gopkg.in/yaml.v3"
 )
 
-b, err := mapstructurejson.MarshalJSON(v)
+b, err := tagjson.MarshalJSON(v)
 node, err := json2yaml.Convert(jsontext.Value(b))
 yaml.NewEncoder(os.Stdout).Encode(node)
 ```

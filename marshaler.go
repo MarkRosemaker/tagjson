@@ -1,19 +1,5 @@
-// Package mapstructurejson marshals a struct-tagged Go value to JSON, reading
-// whichever struct tag the caller names — [mapstructure] by default — rather
-// than requiring a parallel set of "json" tags.
-//
-// [mapstructure] is a decode-only library: it reads a plain map (typically
-// decoded from YAML) into a Go struct tagged "mapstructure:\"foo-bar\"", but
-// offers nothing for the reverse direction. Marshaling such a struct directly
-// with [encoding/json] falls back to its raw Go field names ("FooBar") and
-// writes every zero value out explicitly, since encoding/json only ever looks
-// at "json" tags. [MarshalJSON] reads the "mapstructure" tag instead, through
-// reflection, so any type already set up for mapstructure decoding can be
-// marshaled back out with no further annotation. [Marshaler] reads any other
-// tag the same way, for a type set up for some other library instead — a
-// project's own config-loading tag, [github.com/BurntSushi/toml]'s "toml",
-// or anything else that follows the same "-", ",squash", and plain-name
-// conventions.
+// Package tagjson marshals a struct-tagged Go value to JSON, reading
+// whichever struct tag the caller names, rather than requiring a parallel set of "json" tags.
 //
 // This package only produces JSON, deliberately: JSON is what every YAML
 // library already round-trips through, so a caller wanting YAML converts
@@ -21,13 +7,13 @@
 // package choosing one for them and every caller paying for it. For example,
 // with [github.com/MarkRosemaker/json2yaml] and [gopkg.in/yaml.v3]:
 //
-//	b, err := mapstructurejson.MarshalJSON(v)
+//	b, err := tagjson.MarshalJSON(v)
 //	node, err := json2yaml.Convert(jsontext.Value(b))
 //	yaml.NewEncoder(w).Encode(node)
 //
 // # Semantics
 //
-// The mapping follows mapstructure's own rules, in reverse:
+// The mapping follows mapstructure's rules, in reverse:
 //
 //   - A field tagged "-", or carrying no tag at all, is something decoding
 //     would not have populated from a decoded map either, and is omitted.
@@ -50,23 +36,19 @@
 //     ("1h30m"), not as a number of nanoseconds.
 //
 // [mapstructure]: https://github.com/go-viper/mapstructure
-package mapstructurejson
+package tagjson
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/json/jsontext"
 	"fmt"
 	"io"
 	"reflect"
 )
 
-// defaultTag is the struct tag [Marshaler] reads when Tag is left empty, and
-// the one the package-level [MarshalJSON] and [MarshalWriteJSON] always read.
-const defaultTag = "mapstructure"
-
-// Marshaler marshals a Go value whose struct fields are tagged with Tag,
-// treating that tag exactly like the package doc comment's semantics
-// describe for "mapstructure".
+// Marshaler marshals a Go value whose struct fields are tagged with a given tag,
+// treating that tag exactly like the package doc comment's semantics describe.
 //
 // The zero value reads "mapstructure", the same as the package-level
 // functions; set Tag to read any other struct tag name instead — "yaml",
@@ -77,23 +59,18 @@ const defaultTag = "mapstructure"
 // mean "this type knows how to marshal itself" — the opposite of what
 // Marshaler does, which is marshal some *other* value handed to it.
 type Marshaler struct {
-	// Tag is the struct tag name to read. Empty means "mapstructure".
-	Tag string
+	// the struct tag name to read.
+	tag string
 }
 
-// tag returns m.Tag, or defaultTag if it is empty.
-func (m Marshaler) tag() string {
-	if m.Tag == "" {
-		return defaultTag
-	}
-
-	return m.Tag
+func NewMarshaler(tag string) *Marshaler {
+	return &Marshaler{tag: tag}
 }
 
 // Marshal encodes v as JSON.
-func (m Marshaler) Marshal(v any) ([]byte, error) {
+func (m Marshaler) Marshal(v any, opts ...json.Options) ([]byte, error) {
 	buf := &bytes.Buffer{}
-	if err := m.MarshalWrite(buf, v); err != nil {
+	if err := m.MarshalWrite(buf, v, opts...); err != nil {
 		return nil, err
 	}
 
@@ -101,14 +78,14 @@ func (m Marshaler) Marshal(v any) ([]byte, error) {
 }
 
 // MarshalWrite encodes v as JSON, writing it to w.
-func (m Marshaler) MarshalWrite(w io.Writer, v any) error {
+func (m Marshaler) MarshalWrite(w io.Writer, v any, opts ...json.Options) error {
 	// Buffered rather than written to w directly, so the trailing newline
 	// jsontext.Encoder leaves after a top-level value — its habit, not this
 	// package's — can be trimmed before anything reaches w: Marshal's result
 	// should look like encoding/json.Marshal's, not encoding/json's
 	// Encoder.Encode.
 	buf := &bytes.Buffer{}
-	enc := jsontext.NewEncoder(buf, jsontext.WithIndent("  "))
+	enc := jsontext.NewEncoder(buf, opts...)
 
 	// reflect.ValueOf(&v).Elem(), not reflect.ValueOf(v): boxing a large
 	// struct straight into the any that ValueOf takes reproducibly crashed a
@@ -123,25 +100,13 @@ func (m Marshaler) MarshalWrite(w io.Writer, v any) error {
 	// See TestMarshalYAML.
 	rv := reflect.ValueOf(&v).Elem().Elem()
 
-	if err := m.encodeValue(enc, rv); err != nil {
-		return fmt.Errorf("mapstructurejson: %w", err)
+	if err := m.encodeValue(enc, rv, opts...); err != nil {
+		return fmt.Errorf("tagjson: %w", err)
 	}
 
 	if _, err := w.Write(bytes.TrimRight(buf.Bytes(), "\n")); err != nil {
-		return fmt.Errorf("mapstructurejson: %w", err)
+		return fmt.Errorf("tagjson: %w", err)
 	}
 
 	return nil
-}
-
-// MarshalJSON encodes v as JSON, reading struct fields tagged "mapstructure".
-// Use [Marshaler] directly to read a different tag.
-func MarshalJSON(v any) ([]byte, error) {
-	return Marshaler{}.Marshal(v)
-}
-
-// MarshalWriteJSON encodes v as JSON, writing it to w, reading struct fields
-// tagged "mapstructure". Use [Marshaler] directly to read a different tag.
-func MarshalWriteJSON(w io.Writer, v any) error {
-	return Marshaler{}.MarshalWrite(w, v)
 }
