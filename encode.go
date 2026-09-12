@@ -30,6 +30,7 @@ func (m Marshaler) encodeValue(enc *jsontext.Encoder, v reflect.Value, opts ...j
 		}
 
 		v = v.Elem()
+	default:
 	}
 
 	switch v.Kind() {
