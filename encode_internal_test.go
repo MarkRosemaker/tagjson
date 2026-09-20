@@ -25,21 +25,20 @@ type fixtureNested struct {
 }
 
 type fixture struct {
+	Any         any               `mapstructure:"any"`
+	NestedPtr   *fixtureNested    `mapstructure:"nested-ptr"`
+	Values      map[string]string `mapstructure:"values"`
+	Name        string            `mapstructure:"name"`
+	unexported  string
 	FixtureBase `mapstructure:",squash"`
-
-	Name       string            `mapstructure:"name"`
-	Enabled    bool              `mapstructure:"enabled"`
-	Count      int               `mapstructure:"count"`
-	Ratio      float64           `mapstructure:"ratio"`
-	Tags       []string          `mapstructure:"tags"`
-	Nested     fixtureNested     `mapstructure:"nested"`
-	NestedPtr  *fixtureNested    `mapstructure:"nested-ptr"`
-	Values     map[string]string `mapstructure:"values"`
-	Any        any               `mapstructure:"any"`
-	Timeout    time.Duration     `mapstructure:"timeout"`
-	NoTag      string
-	Ignored    string `mapstructure:"-"`
-	unexported string //nolint:unused
+	Ignored     string `mapstructure:"-"`
+	NoTag       string
+	Tags        []string      `mapstructure:"tags"`
+	Count       int           `mapstructure:"count"`
+	Timeout     time.Duration `mapstructure:"timeout"`
+	Nested      fixtureNested `mapstructure:"nested"`
+	Ratio       float64       `mapstructure:"ratio"`
+	Enabled     bool          `mapstructure:"enabled"`
 }
 
 func TestEncodeUnsupportedKind(t *testing.T) {
