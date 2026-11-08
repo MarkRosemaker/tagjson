@@ -171,11 +171,7 @@ func TestEncode(t *testing.T) {
 	})
 
 	t.Run("a duration is written in its String form", func(t *testing.T) {
-		got := marshal(t, fixture{Name: "x", Timeout: 90 * time.Second}, json.JoinOptions(
-			json.WithMarshalers(json.MarshalToFunc(func(enc *jsontext.Encoder, d time.Duration) error {
-				return enc.WriteToken(jsontext.String(d.String()))
-			})),
-		))
+		got := marshal(t, fixture{Name: "x", Timeout: 90 * time.Second})
 		if !strings.Contains(got, `"timeout":"1m30s"`) {
 			t.Errorf("got %s", got)
 		}
@@ -187,18 +183,4 @@ func TestEncode(t *testing.T) {
 			t.Errorf("got %s", got)
 		}
 	})
-}
-
-// TestMarshalerZeroValueReadsMapstructure checks that Marshaler{} (Tag left
-// empty) behaves exactly like the package-level MarshalJSON, which is
-// documented to read "mapstructure".
-func TestMarshalerZeroValueReadsMapstructure(t *testing.T) {
-	f := fixture{Name: "gorepo", Enabled: true}
-
-	got := marshal(t, f)
-	want := `{"name":"gorepo","enabled":true}`
-
-	if got != want {
-		t.Errorf("got  %s\nwant %s", got, want)
-	}
 }

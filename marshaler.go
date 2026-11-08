@@ -3,11 +3,11 @@
 //
 // This package only produces JSON, deliberately: JSON is what every YAML
 // library already round-trips through, so a caller wanting YAML converts
-// [MarshalJSON]'s output with whichever library they prefer, rather than this
+// [Marshaler.Marshal]'s output with whichever library they prefer, rather than this
 // package choosing one for them and every caller paying for it. For example,
 // with [github.com/MarkRosemaker/json2yaml] and [gopkg.in/yaml.v3]:
 //
-//	b, err := tagjson.MarshalJSON(v)
+//	b, err := tagjson.NewMarshaler("mapstructure").Marshal(v)
 //	node, err := json2yaml.Convert(jsontext.Value(b))
 //	yaml.NewEncoder(w).Encode(node)
 //
@@ -50,9 +50,8 @@ import (
 // Marshaler marshals a Go value whose struct fields are tagged with a given tag,
 // treating that tag exactly like the package doc comment's semantics describe.
 //
-// The zero value reads "mapstructure", the same as the package-level
-// functions; set Tag to read any other struct tag name instead — "yaml",
-// "toml", a project's own — with identical semantics.
+// Create one with [NewMarshaler], naming the struct tag to read — "mapstructure",
+// "yaml", "toml", a project's own — with identical semantics.
 //
 // Methods are named Marshal/MarshalWrite, not MarshalJSON/MarshalWriteJSON:
 // a method actually named MarshalJSON is what [encoding/json] looks for to
@@ -63,6 +62,7 @@ type Marshaler struct {
 	tag string
 }
 
+// NewMarshaler returns a Marshaler reading tag. It panics if tag is empty.
 func NewMarshaler(tag string) *Marshaler {
 	if tag == "" {
 		panic("no tag given")

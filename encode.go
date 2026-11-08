@@ -12,7 +12,7 @@ import (
 
 // durationType lets encodeValue recognise a time.Duration by its exact type,
 // rather than by its underlying int64 kind, which every other integer type
-// shares.
+// shares; encoding/json/v2 has no default representation for it.
 var durationType = reflect.TypeFor[time.Duration]()
 
 // encodeValue writes v to enc.
@@ -23,14 +23,21 @@ var durationType = reflect.TypeFor[time.Duration]()
 // since only the caller (holding the struct field or map entry v came from)
 // can act on that answer by omitting the key altogether.
 func (m Marshaler) encodeValue(enc *jsontext.Encoder, v reflect.Value, opts ...json.Options) error {
-	switch v.Kind() {
-	case reflect.Pointer, reflect.Interface:
+	if !v.IsValid() { // a nil passed to Marshal itself
+		return enc.WriteToken(jsontext.Null)
+	}
+
+	// A loop, since an interface may hold a pointer, which must be unwrapped too.
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
 		if v.IsNil() {
 			return enc.WriteToken(jsontext.Null)
 		}
 
 		v = v.Elem()
-	default:
+	}
+
+	if v.Type() == durationType {
+		return enc.WriteToken(jsontext.String(time.Duration(v.Int()).String()))
 	}
 
 	switch v.Kind() {
@@ -204,10 +211,6 @@ func (m Marshaler) isEmpty(v reflect.Value) bool {
 	case reflect.Map, reflect.Slice:
 		return v.Len() == 0
 	case reflect.Struct:
-		if v.Type() == durationType {
-			return v.Int() == 0
-		}
-
 		t := v.Type()
 
 		for i := range t.NumField() {
