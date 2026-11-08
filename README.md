@@ -38,9 +38,8 @@ last touched, since there is no per-type registry to fall out of sync.
 
 ## Reading a different tag
 
-`Marshal` and `MarshalWrite` always read `mapstructure`, matching the
-package name. For any other tag — `yaml`, `toml`, a project's own — use
-`Marshaler` directly, with the same semantics throughout:
+`NewMarshaler` takes the tag to read. For any other tag — `yaml`, `toml`, a
+project's own — pass its name instead, with the same semantics throughout:
 
 ```go
 type Settings struct {
